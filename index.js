@@ -1,15 +1,29 @@
 const express = require('express');
-const bodyParser = require('body-parser');
+// body-parser is built into express now
 require('dotenv').config();
 const axios = require('axios');
 
 const app = express();
 const morgan = require('morgan');
+
+// Log every request to the console
 app.use(morgan('dev'));
+
 const PORT = process.env.PORT || 3000;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
-app.use(bodyParser.json());
+// Use express built-in body parser
+app.use(express.json());
+
+// Debug middleware to log headers and body of every request
+app.use((req, res, next) => {
+  console.log(`Incoming ${req.method} request to ${req.url}`);
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+     console.log('Body:', JSON.stringify(req.body, null, 2));
+  }
+  next();
+});
 
 // Default route
 app.get('/', (req, res) => {
@@ -40,26 +54,31 @@ app.post('/webhook', (req, res) => {
 
   console.log('Received webhook payload:', JSON.stringify(body, null, 2));
 
-  // Check if this is an event from a WhatsApp API
-  if (body.object) {
-    if (body.entry &&
-      body.entry[0].changes &&
-      body.entry[0].changes[0].value.messages &&
-      body.entry[0].changes[0].value.messages[0]) {
+  try {
+    // Check if this is an event from a WhatsApp API
+    if (body.object) {
+      if (body.entry &&
+        body.entry[0].changes &&
+        body.entry[0].changes[0].value.messages &&
+        body.entry[0].changes[0].value.messages[0]) {
 
-      const phoneNumberId = body.entry[0].changes[0].value.metadata.phone_number_id;
-      const from = body.entry[0].changes[0].value.messages[0].from;
-      const msgBody = body.entry[0].changes[0].value.messages[0].text.body;
+        const phoneNumberId = body.entry[0].changes[0].value.metadata.phone_number_id;
+        const from = body.entry[0].changes[0].value.messages[0].from;
+        const msgBody = body.entry[0].changes[0].value.messages[0].text?.body || "No text body found";
 
-      console.log(`Message received from ${from}: ${msgBody}`);
+        console.log(`Message received from ${from}: ${msgBody}`);
 
-      // Here you would typically process the message
+        // Here you would typically process the message
+      }
+
+      res.sendStatus(200);
+    } else {
+      // Return a '404 Not Found' if event is not from a WhatsApp API
+      res.sendStatus(404);
     }
-
-    res.sendStatus(200);
-  } else {
-    // Return a '404 Not Found' if event is not from a WhatsApp API
-    res.sendStatus(404);
+  } catch (error) {
+    console.error('Error processing webhook:', error);
+    res.sendStatus(500);
   }
 });
 
